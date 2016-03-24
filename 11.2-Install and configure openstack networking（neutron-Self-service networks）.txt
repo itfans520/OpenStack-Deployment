@@ -1,0 +1,258 @@
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/neutron-controller-install-option2.html
+
+#在controller node配置networking组件
+
+#安装组件
+
+apt-get install neutron-server neutron-plugin-ml2 neutron-plugin-linuxbridge-agent neutron-l3-agent neutron-dhcp-agent neutron-metadata-agent python-neutronclient conntrack
+
+###配置服务器组件
+#编辑 /etc/neutron/neutron.conf 文件
+
+#在[database]中配置如下参数
+connection = mysql+pymysql://neutron:NEUTRON_DBPASS@controller/neutron
+#NEUTRON_DBPASS替换为自己的密码
+
+#在[DEFAULT] 中添加如下信息
+core_plugin = ml2
+service_plugins = router
+allow_overlapping_ips = True
+
+在 [DEFAULT]与 [oslo_messaging_rabbit]  中配置RabbitMQ消息队列的访问
+[DEFAULT]
+
+rpc_backend = rabbit
+
+[oslo_messaging_rabbit]
+
+rabbit_host = controller
+rabbit_userid = openstack
+rabbit_password = RABBIT_PASS
+
+#替换 RABBIT_PASS 为自己的密码
+
+#在 [DEFAULT] 与 [keystone_authtoken] 中配置身份服务参数
+
+[DEFAULT]
+
+auth_strategy = keystone
+
+[keystone_authtoken]
+
+auth_uri = http://controller:5000
+auth_url = http://controller:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = neutron
+password = NEUTRON_PASS
+
+# NEUTRON_PASS替换为自己的密码
+
+#在 [DEFAULT] and [nova] 中配置“配置networking通知网络拓扑变更的compute node”
+
+[DEFAULT]
+
+notify_nova_on_port_status_changes = True
+notify_nova_on_port_data_changes = True
+nova_url = http://controller:8774/v2
+
+[nova]
+
+auth_url = http://controller:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+region_name = RegionOne
+project_name = service
+username = nova
+password = NOVA_PASS
+
+#NOVA_PASS 替换为自己的密码
+
+#在[default]中添加用于输出详细日志信息的参数
+verbose = True
+
+###配置Modular Layer 2 （ML2）plug-in
+#ML2 plug-in使用linux 桥接机制构建基于2层的（桥接与交换）虚拟网络架构实例
+
+#编辑/etc/neutron/plugins/ml2/ml2_conf.ini 文件，启用 flat、vlan与vxlan网络
+#在[ml2]中配置如下参数
+type_drivers = flat,vlan,vxlan
+
+#在 [ml2]中，启用VXLAN对象（private）网络
+[ml2]
+tenant_network_types = vxlan
+
+#在 [ml2]中，启用linux 桥接与2层 交换转发机制
+[ml2]
+mechanism_drivers = linuxbridge,l2population
+
+#注意：配置ML2 plug-in后，“type_drivers”选项的改变，将导致数据库信息的不一致。
+#注意：linux桥接代理仅支持vxlan overlay networks
+
+#在[ml2]中，启用端口安全扩展
+extension_drivers = port_security
+
+#在[ml2_type_flat]中，配置公共flat provider network
+flat_networks = public
+
+#在[ml2_type_vxlan] 中，配置vxlan网络私有网络的标识范围
+vni_ranges = 1:1000
+
+#在 [securitygroup] 中，启动ipset，用于提高安全组角色的执行效率
+enable_ipset = True
+
+###配置linux网桥代理
+#Linux网桥代理建立二层（桥接和交换）的实例，其包括私有网络和安全组VXLAN隧道虚拟网络基础设施。
+
+#编辑 /etc/neutron/plugins/ml2/linuxbridge_agent.ini 文件
+
+# [linux_bridge] 中，配置公网虚拟网络到公网物理网络的映射
+
+physical_interface_mappings = public:PUBLIC_INTERFACE_NAME
+#替换PUBLIC_INTERFACE_NAME为底层物理网络接口的名称（如eth0等宿主机物理网卡的名称）
+
+#在[vxlan]中，启用vxlan覆盖网，配置处理覆盖网的物理网络接口的IP地址，并启用2层转发协议
+enable_vxlan = True
+local_ip = OVERLAY_INTERFACE_IP_ADDRESS
+l2_population = True
+#替换 OVERLAY_INTERFACE_IP_ADDRESS 为“用于处理覆盖网的底层物理玩过接口的IP地址”，用于节点间通过隧道进行通讯的管理接口的IP地址
+
+#在[agent]中，启用ARP欺骗防护参数
+prevent_arp_spoofing = True
+
+#在[securitygroup] 中，启用安全组参数，并配置linux桥接iptables防火墙功能
+enable_security_group = True
+firewall_driver = neutron.agent.linux.iptables_firewall.IptablesFirewallDriver
+
+###配置3层代理
+
+#3层代理在虚拟网络中提供路由与NAT服务
+
+#编辑 /etc/neutron/l3_agent.ini 文件
+
+#在 [DEFAULT]中，配置linux网桥接口设备及扩展网桥
+interface_driver = neutron.agent.linux.interface.BridgeInterfaceDriver
+external_network_bridge =
+#等号后面是故意没有填写参数的，用于在单一网络代理中接入多个扩展网络
+
+###配置DHCP代理
+
+#用于在虚拟网络中提供DHCP服务
+
+#编辑/etc/neutron/dhcp_agent.ini 文件
+
+#在[DEFAULT]中，配置linux网桥接口，dnsmasq dhcp ，启用isolated metadata ，可以使公网访问元数据下面的网络
+interface_driver = neutron.agent.linux.interface.BridgeInterfaceDriver
+dhcp_driver = neutron.agent.linux.dhcp.Dnsmasq
+enable_isolated_metadata = True
+
+#在 [DEFAULT] 中，配置dns
+dnsmasq_config_file = /etc/neutron/dnsmasq-neutron.conf
+
+#创建并编辑  /etc/neutron/dnsmasq-neutron.conf 文件，启用DHCP MTU 选项为（26），并配置它为1450 bytes
+dhcp-option-force=26,1450
+
+
+###配置元数据的代理
+
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/neutron-controller-install.html#neutron-controller-metadata-agent
+
+#元数据代理提供诸如凭证实例的配置信息
+
+#编辑 /etc/neutron/metadata_agent.ini 文件
+
+#在[DEFAULT]中，配置访问参数
+
+auth_uri = http://controller:5000
+auth_url = http://controller:35357
+auth_region = RegionOne
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = neutron
+password = NEUTRON_PASS
+
+#NEUTRON_PASS替换为自己的密码
+
+#在[DEFAULT]中，配置元数据主机
+
+nova_metadata_ip = controller
+
+# 在 [DEFAULT] 中，配置原代理共享秘钥
+metadata_proxy_shared_secret = METADATA_SECRET
+#替换METADATA_SECRET为原代理秘钥
+
+
+###配置compute 去使用网络
+
+#编辑 /etc/nova/nova.conf 文件
+
+#在[neutron]中，配置访问参数，启用元数据代理，配置秘钥
+url = http://controller:9696
+auth_url = http://controller:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+region_name = RegionOne
+project_name = service
+username = neutron
+password = NEUTRON_PASS
+
+service_metadata_proxy = True
+metadata_proxy_shared_secret = METADATA_SECRET
+
+#替换NEUTRON_PASS为自己的密码
+#替换METADATA_SECRET为自己的元数据秘钥
+
+#填充数据库
+su -s /bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head" neutron
+
+#重启Compute API service
+service nova-api restart
+
+#重启网络服务
+
+ service neutron-server restart
+ service neutron-plugin-linuxbridge-agent restart
+ service neutron-dhcp-agent restart
+ service neutron-metadata-agent restart
+
+#对于self-service networks ，也需要重启3层网络服务
+service neutron-l3-agent restart
+
+注释：
+
+一般来说，ubuntu系统会创建一个SQLite数据库，这会造成openstack访问异常，所以需要手动删除这个SQLite数据库，命令具体如下：
+rm -f /var/lib/glance/glance.sqlite
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

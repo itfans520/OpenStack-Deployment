@@ -1,0 +1,131 @@
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/cinder-storage-install.html
+#这里介绍如何安装和配置存储服务的存储节点。简单起见，这里配置了一个本地空块存储设备作为存储节点，其为/dev/sdb。当然，也可以用其它块存储设备作为存储节点。
+#块存储服务在存储节点的逻辑卷提供LVM实例通过iSCSI传输，可以通过修改对应参数，横向扩展存储节点。
+
+#在存储节点安装与配置块存储服务之前，需要准备存储设备。
+
+#在存储节点（storage node）上执行如下步骤，进行存储节点的安装与配置。
+
+#安装支持应用包
+apt-get install lvm2
+
+#创建LVM物理卷（/dev/sdb）
+pvcreate /dev/sdb
+#提示为：Physical volume "/dev/sdb" successfully created
+
+#创建LVM卷组（cinder-volumes）
+vgcreate cinder-volumes /dev/sdb
+#提示为：Volume group "cinder-volumes" successfully created
+#在卷组中，块存储服务创建逻辑卷
+
+#说明：只有实例可以访问块存储卷。然而，底层操作系统管理与卷关联的设备。默认情况下，LVM卷扫描工具扫描/dev目录下的块存储设备，包含卷。
+#如果对象使用LVM卷，这些卷会与底层操作系统产生各种问题，所以必须重新配置LVM只扫描包含cinder-volume的卷组。
+
+#编辑 /etc/lvm/lvm.conf 文件
+
+#在devices 中，添加一个过滤配置——“允许扫描检查/dev/sdb设备，禁止扫描其它设备”
+devices {
+filter = [ "a/sdb/", "r/.*/"]
+#说明：其中，a标识accept，r标识reject，并且可以配置正则表达式。数组“[]”中必须以 r/.*/拒绝其它所有设备结束。
+#可以通过vgs-vvvv命令测试过滤效果。
+#注意：如果存储节点在操作系统所在的磁盘中使用LVM，需要添加相关的设备到过滤列表中，比如：/dev/sda中包含操作系统，则：
+过滤条件需要写为：  filter = [ "a/sda/", "a/sdb/", "r/.*/"]
+#如果计算节点的操作系统磁盘使用LVM，就也需要修改过滤文件/etc/lvm/lvm.conf 中包含操作系统磁盘，如：
+filter = [ "a/sda/", "r/.*/"]		#如果/dev/sda设备包括操作系统磁盘
+
+### 安装与配置存储节点组件
+
+#安装依赖包
+apt-get install cinder-volume python-mysqldb
+
+#编辑 /etc/cinder/cinder.conf
+
+#在[database]中，配置数据库
+connection = mysql+pymysql://cinder:CINDER_DBPASS@controller/cinder
+# CINDER_DBPASS 替换为自己的密码
+
+# 在 [DEFAULT] 与 [oslo_messaging_rabbit] 中，配置RabbitMQ 队列信息
+[DEFAULT]
+rpc_backend = rabbit
+
+[oslo_messaging_rabbit]
+rabbit_host = controller
+rabbit_userid = openstack
+rabbit_password = RABBIT_PASS
+#RABBIT_PASS 替换为自己的密码
+
+#在[DEFAULT] 与 [keystone_authtoken] 中，配置身份服务
+[DEFAULT]
+auth_strategy = keystone
+
+[keystone_authtoken]
+auth_uri = http://controller:5000
+auth_url = http://controller:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = cinder
+password = CINDER_PASS
+#CINDER_PASS替换为自己的密码
+
+#在[DEFAULT]中，配置“my_ip”
+my_ip = MANAGEMENT_INTERFACE_IP_ADDRESS
+#MANAGEMENT_INTERFACE_IP_ADDRESS 替换为存储节点的网络接口IP地址，示例中为10.0.0.41
+#示例参考如下连接中“Hardware Requirements”图
+http://docs.openstack.org/liberty/install-guide-ubuntu/overview.html#overview-example-architectures
+
+#在 [lvm]中，配置LVM 后端用于LVM设备、cinder-volumes卷组、iSCSI协议与适当的iSCSI服务
+[lvm]
+volume_driver = cinder.volume.drivers.lvm.LVMVolumeDriver
+volume_group = cinder-volumes
+iscsi_protocol = iscsi
+iscsi_helper = tgtadm
+
+#在[DEFAULT]中，启用LVM后端
+enabled_backends = lvm
+#后端的名称可以随便指定
+
+#在[DEFAULT]中，配置镜像服务的本地属性
+glance_host = controller
+
+# 在 [oslo_concurrency] 中，配置lock path
+lock_path = /var/lib/cinder/tmp
+
+#在[DEFAULT]中，开启详细日志功能
+verbose = True
+
+#重启块存储卷服务以及依赖服务
+ service tgt restart
+ service cinder-volume restart
+
+注释：
+
+一般来说，ubuntu系统会创建一个SQLite数据库，这会造成openstack访问异常，所以需要手动删除这个SQLite数据库，命令具体如下：
+rm -f /var/lib/cinder/cinder.sqlite
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

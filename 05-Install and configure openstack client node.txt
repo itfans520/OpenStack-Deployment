@@ -1,0 +1,15 @@
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/environment-packages.html
+
+#下面的命令需要在openstack所有节点中安装
+
+(1)安装一些必要的关联文件或库文件
+apt-get install software-properties-common
+add-apt-repository cloud-archive:liberty
+#有时候会报一些异常，可忽略
+
+（2）进行更新
+apt-get update && apt-get dist-upgrade
+#安装更新，很慢
+
+（3）安装openstack client
+apt-get install python-openstackclient

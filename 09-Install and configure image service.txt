@@ -1,0 +1,132 @@
+#可参考http://docs.openstack.org/liberty/install-guide-ubuntu/glance-install.html
+#安装与配置image service
+#这一步主要介绍如何安装于配置image service，代号为glance，被安装在controller node中，，简单说，这是在本地的文件系统中配置存储镜像；
+#安装与配置image service之前，必须先创建一个数据库、服务凭据于API端点
+
+#使用root用户连接mysql数据库
+mysql -u root -p
+
+###创建一个glance数据库
+CREATE DATABASE glance;
+
+#为glance数据库赋予访问权限
+
+GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY 'GLANCE_DBPASS';
+GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY 'GLANCE_DBPASS';
+#替换GLANCE_DBPASS为自己的密码
+#退出数据库
+
+#为glance数据库添加admin权限
+source admin-openrc.sh
+
+###创建服务凭证
+#创建glance用户
+ openstack user create --domain default --password-prompt glance 
+#输入密码
+
+#将glance用户添加至admin角色中
+openstack role add --project service --user glance admin
+
+#创建glance服务实体
+openstack service create --name glance --description "OpenStack Image service" image
+
+#创建image 服务API端点
+
+openstack endpoint create --region RegionOne image public http://controller:9292
+openstack endpoint create --region RegionOne image internal http://controller:9292
+openstack endpoint create --region RegionOne image admin http://controller:9292
+
+###安装glance相关的一些包文件
+apt-get install glance python-glanceclient
+
+#编辑 /etc/glance/glance-api.conf 文件
+
+#在[database]下添加
+connection = mysql+pymysql://glance:GLANCE_DBPASS@controller/glance  #替换GLANCE_DBPASS为自己的密码
+
+#[keystone_authtoken]中添加如下信息
+
+auth_uri = http://controller:5000
+auth_url = http://controller:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = glance
+password = GLANCE_PASS	#GLANCE_PASS为自己的密码
+
+#在[paste_deploy] 中添加如下内容
+flavor = keystone
+
+#在 [glance_store] 中 配置本地文件系统的存储目录及镜像文件的本地存储目录
+
+default_store = file
+filesystem_store_datadir = /var/lib/glance/images/
+
+#在[DEFAULT]中添加如下参数，用于禁止通知，后面会通过web界面配置相应的通知参数
+notification_driver = noop
+
+
+#编辑 /etc/glance/glance-registry.conf 文件
+
+#在 [database]中添加
+connection = mysql+pymysql://glance:GLANCE_DBPASS@controller/glance
+
+#替换GLANCE_DBPASS为自己的密码
+
+#在 [keystone_authtoken]中添加如下信息
+auth_uri = http://controller:5000
+auth_url = http://controller:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = glance
+password = GLANCE_PASS
+
+#GLANCE_PASS替换为自己的密码
+
+#在[paste_deploy]中添加如下参数
+flavor = keystone
+
+#在[DEFAULT]中添加如下参数，用于禁止通知，后面会通过web界面配置相应的通知参数
+notification_driver = noop
+
+#填充数据库信息
+su -s /bin/sh -c "glance-manage db_sync" glance
+
+#重启image service
+service glance-registry restart
+service glance-api restart
+
+注释：
+
+一般来说，ubuntu系统会创建一个SQLite数据库，这会造成openstack访问异常，所以需要手动删除这个SQLite数据库，命令具体如下：
+rm -f /var/lib/glance/glance.sqlite
+
+
+###验证image service的配置是否正确
+
+#在每一个client环境执行脚本，配置image service客户端使用API 2.0
+ echo "export OS_IMAGE_API_VERSION=2" | tee -a admin-openrc.sh demo-openrc.sh
+
+#执行admin脚本，赋予admin权限
+source admin-openrc.sh
+
+#从网上下载镜像文件（示例镜像文件）
+wget http://download.cirros-cloud.net/0.3.4/cirros-0.3.4-x86_64-disk.img
+
+#将从网上下载的示例镜像文件上传到openstack系统中
+
+glance image-create --name "cirros"  --file cirros-0.3.4-x86_64-disk.img --disk-format qcow2 --container-format bare --visibility public --progress
+
+#查看示例镜像文件是否上传成功
+glance image-list
+
+
+
+
+
+
+
+

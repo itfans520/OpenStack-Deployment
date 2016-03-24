@@ -1,0 +1,28 @@
+#可以按照docs.openstack.org中的步骤进行安装
+docs.openstack.org/liberty/instal-gride-ubuntu/environment-ntp-controller.html
+
+#controller node (作为ntp主节点，其他节点参照controller节点同步)
+
+apt-get install chrony
+
+改/etc/chrony/chrony.conf文件内容（可改可不改）
+
+重启chrony
+service chrony restart
+
+#other node
+
+apt-get install chrony
+改/etc/chrony/chrony.conf文件内容（注释掉所有server项）
+添加如下内容：
+server controller lburst
+
+重启chrony
+service chrony restart
+
+#验证
+在控制节点输入如下命令：
+chronyc sources
+#加星的是同步正常
+
+other node 也相同（other node多重启几次就能跟控制节点进行同步）

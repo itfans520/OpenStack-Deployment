@@ -1,0 +1,185 @@
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/environment-sql-database.html
+
+#在控制节点进行安装（controller node installed）
+
+### 安装SQL
+apt-get install mariadb-server python-pymysql
+输入mariadb的密码
+
+#创建并编辑
+/etc/mysql/conf.d/mysqld_openstack.cnf
+在mysqld中添加下列配置：
+
+[mysqld]
+bind-address = 10.0.0.11  #controller 的IP地址
+
+#接着添加
+default-storage-engine = innodb
+innodb_file_per_table
+collation-server = utf8_general_ci
+init-connect = 'SET NAMES utf8'
+character-set-server = utf8
+
+重启mysql
+ service mysqld restart
+
+
+###安装nosql
+ apt-get install mongodb-server mongodb-clients python-pymongo
+
+#编辑/etc/mongodb.conf 
+bind_ip = 10.0.0.11   #controller 的IP地址
+
+#创建小的日志文件
+smallfiles = true
+#如果不加这一句，monogodb的文件大小会达到1GB，添加后，会在128-521MB之间
+
+#重启monogodb
+ service mongodb stop
+ rm /var/lib/mongodb/journal/prealloc.*		#如果没有文件，就不用管了
+ service mongodb start
+
+#查看monogodb是否启动
+
+
+###安装消息队列
+
+apt-get install rabbitmq-server
+
+#添加一个openstack user
+rabbitmqctl add_user openstack RABBIT_PASS  #RABBIT_PASS 需要替换为自己的密码
+
+#配置openstack user的权限
+rabbitmqctl set_permissions openstack ".*" ".*" ".*"
+
+
+###添加SQL的身份验证
+参考http://docs.openstack.org/liberty/install-guide-ubuntu/keystone-install.html
+
+mysql -u root -p
+#登陆mariadb
+
+#创建一个keystone的数据库
+CREATE DATABASE keystone;
+
+#为keystone赋数据库的访问权限
+GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost'  IDENTIFIED BY 'KEYSTONE_DBPASS';  
+#  KEYSTONE_DBPASS为自己的密码
+
+GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' IDENTIFIED BY 'KEYSTONE_DBPASS';#  KEYSTONE_DBPASS为自己的密码
+
+#退出mariadb
+exit
+
+#生成随机密码
+
+ openssl rand -hex 10
+
+#保存随机生成的密码
+
+
+### 配置keystone，不让keystone自动启动
+echo "manual" > /etc/init/keystone.override
+
+#安装apache 组件
+apt-get install keystone apache2 libapache2-mod-wsgi memcached python-memcache
+
+#编辑这个文件
+/etc/keystone/keystone.conf
+
+#定义admin_token
+[DEFAULT]
+admin_token = ADMIN_TOKEN  #之前随机生成的密码
+
+#在database中黏贴 connection的内容
+[database]
+connection = mysql+pymysql://keystone:KEYSTONE_DBPASS@controller/keystone
+#KEYSTONE_DBPASS为自己的密码
+
+#配置memcache的端口，黏贴servers后面的内容
+[memcache]
+servers = localhost:11211
+
+#在[token]中添加两句参数
+[token]
+provider = uuid
+driver = memcache
+
+#配置revoke参数
+[revoke]
+driver = sql
+
+###openstack.org中提到的optional信息，可不用做
+
+#填充数据库
+su -s /bin/sh -c "keystone-manage db_sync" keystone
+
+#编辑这个文件
+/etc/apache2/apache2.conf
+
+ServerName controller   #controller 域名
+
+#创建 /etc/apache2/sites-available/wsgi-keystone.conf  文件 并 黏贴如下内容
+
+############################
+
+Listen 5000
+Listen 35357
+
+<VirtualHost *:5000>
+    WSGIDaemonProcess keystone-public processes=5 threads=1 user=keystone group=keystone display-name=%{GROUP}
+    WSGIProcessGroup keystone-public
+    WSGIScriptAlias / /usr/bin/keystone-wsgi-public
+    WSGIApplicationGroup %{GLOBAL}
+    WSGIPassAuthorization On
+    <IfVersion >= 2.4>
+      ErrorLogFormat "%{cu}t %M"
+    </IfVersion>
+    ErrorLog /var/log/apache2/keystone.log
+    CustomLog /var/log/apache2/keystone_access.log combined
+
+    <Directory /usr/bin>
+        <IfVersion >= 2.4>
+            Require all granted
+        </IfVersion>
+        <IfVersion < 2.4>
+            Order allow,deny
+            Allow from all
+        </IfVersion>
+    </Directory>
+</VirtualHost>
+
+<VirtualHost *:35357>
+    WSGIDaemonProcess keystone-admin processes=5 threads=1 user=keystone group=keystone display-name=%{GROUP}
+    WSGIProcessGroup keystone-admin
+    WSGIScriptAlias / /usr/bin/keystone-wsgi-admin
+    WSGIApplicationGroup %{GLOBAL}
+    WSGIPassAuthorization On
+    <IfVersion >= 2.4>
+      ErrorLogFormat "%{cu}t %M"
+    </IfVersion>
+    ErrorLog /var/log/apache2/keystone.log
+    CustomLog /var/log/apache2/keystone_access.log combined
+
+    <Directory /usr/bin>
+        <IfVersion >= 2.4>
+            Require all granted
+        </IfVersion>
+        <IfVersion < 2.4>
+            Order allow,deny
+            Allow from all
+        </IfVersion>
+    </Directory>
+</VirtualHost>
+
+##################################
+
+#创建站点软连接
+ln -s /etc/apache2/sites-available/wsgi-keystone.conf /etc/apache2/sites-enabled
+
+#重启apache
+service apache2 restart
+
+#删除原来SQLite的数据库，目的是使用我们自己的数据库
+
+rm -f /var/lib/keystone/keystone.db

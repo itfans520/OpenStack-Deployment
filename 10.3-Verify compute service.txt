@@ -1,0 +1,41 @@
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/nova-verify.html
+
+#在控制器节点上执行这些命令
+
+#使用admin账户
+source admin-openrc.sh
+
+#查看服务组件是否成功的运行并注册到每一个进程中
+#注：这个输出内容应该包括 4 个controller node的服务组件，以及 1 个compute节点的服务组件
+ nova service-list
++----+------------------+------------+----------+---------+-------+--------------+-----------------+
+| Id | Binary           | Host       | Zone     | Status  | State | Updated_at   | Disabled Reason |
++----+------------------+------------+----------+---------+-------+--------------+-----------------+
+| 1  | nova-conductor   | controller | internal | enabled | up    | 2014-09-16.. | -               |
+| 2  | nova-consoleauth | controller | internal | enabled | up    | 2014-09-16.. | -               |
+| 3  | nova-scheduler   | controller | internal | enabled | up    | 2014-09-16.. | -               |
+| 4  | nova-cert        | controller | internal | enabled | up    | 2014-09-16.. | -               |
+| 5  | nova-compute     | compute1   | nova     | enabled | up    | 2014-09-16.. | -               |
++----+------------------+------------+----------+---------+-------+--------------+-----------------+
+
+#列出API端点，在身份服务中去验证连接是否正常
+nova endpoints
+#注：忽略任何告警的输出
+
+#在镜像服务目录中验证镜像连接是否正常，并查看列表状态信息
+nova image-list
++--------------------------------------+--------+--------+--------+
+| ID                                   | Name   | Status | Server |
++--------------------------------------+--------+--------+--------+
+| 38047887-61a7-41ea-9b49-27987d5e8bb9 | cirros | ACTIVE |        |
++--------------------------------------+--------+--------+--------+
+
+
+
+
+
+
+
+
+
+

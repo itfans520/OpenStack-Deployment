@@ -1,0 +1,51 @@
+compute-1
+
+#The loopback network interface
+
+auto lo
+iface lo inet loopback
+
+#The primary network interface
+
+auto eth0
+iface eth0 inet static
+address 10.0.2.16
+netmask 255.255.255.0
+gateway 10.0.2.2
+
+auto eth1
+iface eth1 inet static
+address 10.0.0.31
+netmask 255.255.255.0
+
+auto eth2
+iface eth2 inet static
+address 192.168.56.106
+netmask 255.255.255.0
+gateway 192.168.56.1
+
+controller-1
+
+#The loopback network interface
+
+auto lo
+iface lo inet loopback
+
+#The primary network interface
+
+auto eth0
+iface eth0 inet static
+address 10.0.2.15
+netmask 255.255.255.0
+gateway 10.0.2.2
+
+auto eth1
+iface eth1 inet static
+address 10.0.0.11
+netmask 255.255.255.0
+
+auto eth2
+iface eth2 inet static
+address 192.168.56.105
+netmask 255.255.255.0
+gateway 192.168.56.1

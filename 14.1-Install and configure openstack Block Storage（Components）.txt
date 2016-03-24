@@ -1,0 +1,19 @@
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/common/get_started_block_storage.html
+
+#块存储服务需要的服务
+
+#cinder-api
+接受API请求，并且在激活的节点路由cinder-volume
+
+#cinder-volume
+直接与块存储服务进行交互并处理cinder-scheduler。它也通过消息队列与这些进程进行交互。cinder-volume 服务响应读写请求，并将其发送到块存储服务中记录其状态。
+
+#cinder-scheduler daemon
+在创建新的volume时选择一个最佳的存储节点，类似nova-scheduler
+
+#cinder-backup daemon
+cinder-backup服务提供所有类型的备份卷给备份存储单元。像cinder-volume服务，它可以通过一个驱动程序架构与各种存储供应商进行交互。
+
+#Messaging queue
+块存储进程之间传递信息
+

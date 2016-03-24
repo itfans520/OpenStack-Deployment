@@ -1,0 +1,148 @@
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/neutron-compute-install.html
+
+#compute node 用于处理实例的连接与安全组
+
+#安装compute node 需要的组件
+apt-get install neutron-plugin-linuxbridge-agent conntrack
+
+###配置公共组件（网络公共组件的配置内容包括：验证机制、消息队列与plug-in）
+
+#编辑/etc/neutron/neutron.conf 文件
+
+#在[database]参数配置中，需要注释掉所有的“connection项”，因为compute nodes是不会直接访问数据库的。
+
+#在[default]与[oslo_messaging_rabbit]中，配置RabbitMQ消息队列
+[DEFAULT]
+rpc_backend = rabbit
+
+[oslo_messaging_rabbit]
+rabbit_host = controller
+rabbit_userid = openstack
+rabbit_password = RABBIT_PASS
+#RABBIT_PASS替换为自己的密码
+
+#在[DEFAULT] 与 [keystone_authtoken]中，配置身份服务
+
+[DEFAULT]
+
+auth_strategy = keystone
+
+[keystone_authtoken]
+
+auth_uri = http://controller:5000
+auth_url = http://controller:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = neutron
+password = NEUTRON_PASS
+
+#替换为自己的密码
+#注意：将配置文件中原有的配置注释掉，使用上面新的配置
+
+###Networking Option 2: Self-service 
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/neutron-compute-install-option2.html
+
+#配置linux网桥代理
+
+#编辑 /etc/neutron/plugins/ml2/linuxbridge_agent.ini 文件
+
+#在[linux_bridge]中，映射公共虚拟网络与公共物理网络接口
+physical_interface_mappings = public:PUBLIC_INTERFACE_NAME
+
+#替换 PUBLIC_INTERFACE_NAME 为底层物理公网网络接口的名称，比如宿主机的物理网卡eth0
+
+#在[vxlan]中，启用vxlan覆盖网
+enable_vxlan = True
+local_ip = OVERLAY_INTERFACE_IP_ADDRESS
+l2_population = True
+#OVERLAY_INTERFACE_IP_ADDRESS替换为node的管理IP，compute node的地址，如本示例中为10.0.0.31
+
+#在[agent]中，配置ARP欺骗防护
+prevent_arp_spoofing = True
+
+#在 [securitygroup]中，启用安全组并配置linux桥接的防火墙配置
+enable_security_group = True
+firewall_driver = neutron.agent.linux.iptables_firewall.IptablesFirewallDriver
+
+###配置compute去使用网络
+参考http://docs.openstack.org/liberty/install-guide-ubuntu/neutron-compute-install.html#neutron-compute-compute
+
+#编辑/etc/nova/nova.conf 文件
+
+#在 [neutron] 中，配置访问参数
+
+[neutron]
+
+url = http://controller:9696
+auth_url = http://controller:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+region_name = RegionOne
+project_name = service
+username = neutron
+password = NEUTRON_PASS
+#NEUTRON_PASS替换为自己的密码
+
+#重启compute service
+service nova-compute restart
+
+#重启linux 桥接代理
+service neutron-plugin-linuxbridge-agent restart
+
+#验证compute node（neutron）安装的是否正确
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/neutron-verify.html
+
+#获取管理员操作权限
+source admin-openrc.sh
+
+#查看neutron-server进程服务的列表
+$ neutron ext-list
++-----------------------+-----------------------------------------------+
+| alias                 | name                                          |
++-----------------------+-----------------------------------------------+
+| dns-integration       | DNS Integration                               |
+| ext-gw-mode           | Neutron L3 Configurable external gateway mode |
+| binding               | Port Binding                                  |
+| agent                 | agent                                         |
+| subnet_allocation     | Subnet Allocation                             |
+| l3_agent_scheduler    | L3 Agent Scheduler                            |
+| external-net          | Neutron external network                      |
+| flavors               | Neutron Service Flavors                       |
+| net-mtu               | Network MTU                                   |
+| quotas                | Quota management support                      |
+| l3-ha                 | HA Router extension                           |
+| provider              | Provider Network                              |
+| multi-provider        | Multi Provider Network                        |
+| extraroute            | Neutron Extra Route                           |
+| router                | Neutron L3 Router                             |
+| extra_dhcp_opt        | Neutron Extra DHCP opts                       |
+| security-group        | security-group                                |
+| dhcp_agent_scheduler  | DHCP Agent Scheduler                          |
+| rbac-policies         | RBAC Policies                                 |
+| port-security         | Port Security                                 |
+| allowed-address-pairs | Allowed Address Pairs                         |
+| dvr                   | Distributed Virtual Router                    |
++-----------------------+-----------------------------------------------+
+
+#查看neutron的代理
+
+$ neutron agent-list
++--------------------------------------+--------------------+------------+-------+----------------+---------------------------+
+| id                                   | agent_type         | host       | alive | admin_state_up | binary                    |
++--------------------------------------+--------------------+------------+-------+----------------+---------------------------+
+| 08905043-5010-4b87-bba5-aedb1956e27a | Linux bridge agent | compute1   | :-)   | True           | neutron-linuxbridge-agent |
+| 27eee952-a748-467b-bf71-941e89846a92 | Linux bridge agent | controller | :-)   | True           | neutron-linuxbridge-agent |
+| 830344ff-dc36-4956-84f4-067af667a0dc | L3 agent           | controller | :-)   | True           | neutron-l3-agent          |
+| dd3644c9-1a3a-435a-9282-eb306b4b0391 | DHCP agent         | controller | :-)   | True           | neutron-dhcp-agent        |
+| f49a4b81-afd6-4b3d-b923-66c8f0517099 | Metadata agent     | controller | :-)   | True           | neutron-metadata-agent    |
++--------------------------------------+--------------------+------------+-------+----------------+-------------
+
+
+
+
+
+
+

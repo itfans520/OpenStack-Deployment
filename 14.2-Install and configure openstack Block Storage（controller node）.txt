@@ -1,0 +1,115 @@
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/cinder-controller-install.html
+
+#这里记录在controller node如何安装与配置块存储服务，code-named cinder。
+#这个服务要求至少可以有一个“额外的储存节点”提供给实例用于卷的操作。
+
+#安装配置 块存储服务之前，需要创建数据库、服务凭证与API端点
+
+###创建一个数据库（使用root用户登录数据库）
+mysql -u root -p
+
+#创建一个cinder数据库
+CREATE DATABASE cinder;
+
+#配置cinder数据库的访问权限
+GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'localhost' IDENTIFIED BY 'CINDER_DBPASS';
+GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%' IDENTIFIED BY 'CINDER_DBPASS';
+#CINDER_DBPASS替换为自己的密码
+
+#退出数据库
+exit
+
+#获取admin配置权限
+source admin-openrc.sh
+
+###创建服务凭证
+#创建一个cinder用户
+openstack user create --domain default --password-prompt cinder
+#输入密码
+
+#将cinder用户添加到admin的角色中
+openstack role add --project service --user cinder admin
+
+#创建cinder与cinderv2服务实体
+openstack service create --name cinder --description "OpenStack Block Storage" volume
+openstack service create --name cinderv2 --description "OpenStack Block Storage" volumev2
+#注意：块存储服务需要2个服务实体
+
+###创建块存储服务API端点
+openstack endpoint create --region RegionOne volume public http://controller:8776/v1/%\(tenant_id\)s
+openstack endpoint create --region RegionOne volume internal http://controller:8776/v1/%\(tenant_id\)s
+openstack endpoint create --region RegionOne volume admin http://controller:8776/v1/%\(tenant_id\)s
+openstack endpoint create --region RegionOne volumev2 public http://controller:8776/v2/%\(tenant_id\)s
+openstack endpoint create --region RegionOne volumev2 internal http://controller:8776/v2/%\(tenant_id\)s
+openstack endpoint create --region RegionOne volumev2 admin http://controller:8776/v2/%\(tenant_id\)s
+#注意：块存储服务要求每个服务实体都配置端点
+
+###安装配置cinder相关组件（块存储组件）
+
+#安装cinder相关组件包
+apt-get install cinder-api cinder-scheduler python-cinderclient
+
+#编辑/etc/cinder/cinder.conf文件
+
+#在 [database] 中，配置数据库访问
+connection = mysql+pymysql://cinder:CINDER_DBPASS@controller/cinder
+#CINDER_DBPASS 替换为自己的密码
+
+#在 [DEFAULT] 与 [oslo_messaging_rabbit] 中，配置RabbitMQ队列消息
+[DEFAULT]
+rpc_backend = rabbit
+
+[oslo_messaging_rabbit]
+rabbit_host = controller
+rabbit_userid = openstack
+rabbit_password = RABBIT_PASS
+#替换为自己的密码
+
+#在[DEFAULT] 与 [keystone_authtoken] 中，配置身份服务
+[DEFAULT]
+auth_strategy = keystone
+
+[keystone_authtoken]
+auth_uri = http://controller:5000
+auth_url = http://controller:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = cinder
+password = CINDER_PASS
+#CINDER_PASS 替换为自己的密码
+
+#在 [DEFAULT] 中，配置“my_ip”参数，使用controller node的管理接口IP地址
+my_ip = 10.0.0.11
+
+#在[oslo_concurrency]中，配置lock path
+lock_path = /var/lib/cinder/tmp
+
+#填充数据库
+su -s /bin/sh -c "cinder-manage db sync" cinder
+
+###配置compute，使其使用块存储
+
+#编辑/etc/nova/nova.conf文件，添加如下内容
+[cinder]
+os_region_name = RegionOne
+
+#重启compute API服务
+service nova-api restart
+
+#重启块存储服务
+ service cinder-scheduler restart
+ service cinder-api restart
+
+注释：
+
+一般来说，ubuntu系统会创建一个SQLite数据库，这会造成openstack访问异常，所以需要手动删除这个SQLite数据库，命令具体如下：
+rm -f /var/lib/glance/glance.sqlite
+
+
+
+
+
+
+

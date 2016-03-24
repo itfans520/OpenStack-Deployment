@@ -1,0 +1,27 @@
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/keystone-openrc.html
+
+#创建并编辑“管理员权限”脚本（admin-openrc.sh 为脚本文件）
+export OS_PROJECT_DOMAIN_ID=default
+export OS_USER_DOMAIN_ID=default
+export OS_PROJECT_NAME=admin
+export OS_TENANT_NAME=admin
+export OS_USERNAME=admin
+export OS_PASSWORD=ADMIN_PASS	#替换ADMIN_PASS为自己的密码
+export OS_AUTH_URL=http://controller:35357/v3
+export OS_IDENTITY_API_VERSION=3
+
+#创建并编辑“demo权限用户”脚本（ demo-openrc.sh为脚本文件）
+export OS_PROJECT_DOMAIN_ID=default
+export OS_USER_DOMAIN_ID=default
+export OS_PROJECT_NAME=demo
+export OS_TENANT_NAME=demo
+export OS_USERNAME=demo
+export OS_PASSWORD=DEMO_PASS	#替换ADMIN_PASS为自己的密码
+export OS_AUTH_URL=http://controller:5000/v3
+export OS_IDENTITY_API_VERSION=3
+
+#执行脚本
+source admin-openrc.sh
+openstack token issue
+source demo-openrc.sh
+openstack token issue

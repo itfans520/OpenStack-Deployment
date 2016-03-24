@@ -1,0 +1,159 @@
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/nova-controller-install.html
+
+#在controller node上进行配置
+
+#在安装与配置compute service之前，必须先创建一个数据库、服务凭据及API端点
+
+#创建一个数据库
+mysql -u root -p
+
+#创建一个nova数据库
+CREATE DATABASE nova;
+
+#为nova数据库赋予访问权限
+GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'localhost' IDENTIFIED BY 'NOVA_DBPASS';
+GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'%' IDENTIFIED BY 'NOVA_DBPASS';
+#NOVA_DBPASS替换为自己的密码
+
+#退出数据库
+exit
+
+#执行admin-openrc.sh，允许admin用户访问nova库
+source admin-openrc.sh
+
+#创建nova用户
+openstack user create --domain default --password-prompt nova
+#输入密码
+
+#将nova用户添加到admin角色中
+openstack role add --project service --user nova admin
+
+#创建nova service 实体
+ openstack service create --name nova --description "OpenStack Compute" compute
+
+#创建compute service API 端点
+openstack endpoint create --region RegionOne compute public http://controller:8774/v2/%\(tenant_id\)s
+openstack endpoint create --region RegionOne compute internal http://controller:8774/v2/%\(tenant_id\)s
+openstack endpoint create --region RegionOne compute admin http://controller:8774/v2/%\(tenant_id\)s
+
+###安装nova API
+
+#安装nova API 的依赖包
+apt-get install nova-api nova-cert nova-conductor nova-consoleauth nova-novncproxy nova-scheduler python-novaclient
+
+#编辑/etc/nova/nova.conf文件
+
+#在[database]中添加如下参数
+connection = mysql+pymysql://nova:NOVA_DBPASS@controller/nova
+
+#在[DEFAULT]中添加如下参数
+rpc_backend = rabbit
+
+#在[oslo_messaging_rabbit]中添加如下参数
+rabbit_host = controller
+rabbit_userid = openstack
+rabbit_password = RABBIT_PASS
+#RABBIT_PASS替换为自己的密码
+
+#在[DEFAULT]中添加如下参数
+auth_strategy = keystone
+
+#在[keystone_authtoken]中添加如下参数
+
+auth_uri = http://controller:5000
+auth_url = http://controller:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = nova
+password = NOVA_PASS
+
+#NOVA_PASS替换为自己的密码
+
+#在[DEFAULT]中，配置“my_ip”为controller node的管理接口IP地址
+my_ip = 10.0.0.11
+
+#在[DEFAULT]中添加能够支持的网络服务
+network_api_class = nova.network.neutronv2.api.API
+security_group_api = neutron
+linuxnet_interface_driver = nova.network.linux_net.NeutronLinuxBridgeInterfaceDriver
+firewall_driver = nova.virt.firewall.NoopFirewallDriver
+
+##注意 ： 默认情况下，操作系统会使用自己的防火墙服务，但是我们需要停止掉操作系统的防火墙服务，使用 nova.virt.firewall.NoopFirewallDriver 的防火墙驱动服务
+
+#在[vnc]选线中，配置VNC 代理，使用controller node的管理接口IP地址，因为之前配置过（my_ip），所以在参数中，通过引用这个（my_ip）变量即可；
+vncserver_listen = $my_ip
+vncserver_proxyclient_address = $my_ip
+
+#在[glance]参数中，配置image service为本机
+host = controller
+
+#在 [oslo_concurrency] 参数中，配置lock_path路径
+lock_path = /var/lib/nova/tmp
+
+#在[DEFAULT] 中，禁用EC2 API
+enabled_apis=osapi_compute,metadata
+
+#在[DEFAULT]中，配置用户排查故障的详细日志输出参数
+verbose = True
+
+#填充数据库
+su -s /bin/sh -c "nova-manage db sync" nova
+
+#重启compute service
+
+# service nova-api restart
+# service nova-cert restart
+# service nova-consoleauth restart
+# service nova-scheduler restart
+# service nova-conductor restart
+# service nova-novncproxy restart
+
+注释：
+
+一般来说，ubuntu系统会创建一个SQLite数据库，这会造成openstack访问异常，所以需要手动删除这个SQLite数据库，命令具体如下：
+rm -f /var/lib/glance/glance.sqlite
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,47 @@
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/horizon-install.html
+
+#在控制节点安装dashboard
+
+#安装dashboard包文件
+apt-get install openstack-dashboard
+
+#编辑/etc/openstack-dashboard/local_settings.py 文件
+
+#配置dashboard在controller node去使用openstack
+OPENSTACK_HOST = "controller"
+
+#配置允许哪些主机可以访问dashboard
+ALLOWED_HOSTS = ['*', ]		#此处配置为允许全部主机均可以访问dashboard
+
+#配置memcached会话存储服务
+CACHES = {
+    'default': {
+         'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+         'LOCATION': '127.0.0.1:11211',
+    }
+}
+
+#配置在dashboard中创建用户时的默认角色
+OPENSTACK_KEYSTONE_DEFAULT_ROLE = "user"
+
+#启用多域模型
+OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True
+
+#配置通过keystone V3 API版本在日志中记录的“服务API版本”
+OPENSTACK_API_VERSIONS = {
+    "identity": 3,
+    "volume": 2,
+}
+
+#配置time zone
+TIME_ZONE = "Asia/Shanghai"
+
+#重启apache服务
+ service apache2 reload
+
+
+
+
+
+
+

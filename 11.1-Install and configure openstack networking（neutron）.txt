@@ -1,0 +1,61 @@
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/neutron-controller-install.html
+
+#配置openstack networking(neutron)服务之前，必须先创建数据库、服务凭证及API端点
+
+#登陆mysql
+mysql -u root -p
+
+#创建neutron数据库
+CREATE DATABASE neutron;
+
+#为neutron数据库赋访问权限
+GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'localhost' IDENTIFIED BY 'NEUTRON_DBPASS';
+GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'%' IDENTIFIED BY 'NEUTRON_DBPASS';
+#NEUTRON_DBPASS替换为自己的密码
+
+#退出数据库
+exit
+
+#获取admin用户的操作权限
+source admin-openrc.sh
+
+###创建服务凭证
+#创建neutron用户
+openstack user create --domain default --password-prompt neutron
+#输入密码
+
+#为neutron用户添加admin角色
+openstack role add --project service --user neutron admin
+
+#创建neutron服务实体
+
+openstack service create --name neutron --description "OpenStack Networking" network
++-------------+----------------------------------+
+| Field       | Value                            |
++-------------+----------------------------------+
+| description | OpenStack Networking             |
+| enabled     | True                             |
+| id          | f71529314dab4a4d8eca427e701d209e |
+| name        | neutron                          |
+| type        | network                          |
++-------------+----------------------------------+
+
+#创建Networking service API 端点
+
+ openstack endpoint create --region RegionOne network public http://controller:9696
+ openstack endpoint create --region RegionOne network internal http://controller:9696
+ openstack endpoint create --region RegionOne network admin http://controller:9696
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,98 @@
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/nova-compute-install.html
+
+###安装compute node 组件
+
+#安装nova 依赖包
+apt-get install nova-compute sysfsutils
+
+#编辑/etc/nova/nova.conf 文件
+
+#在 [DEFAULT]中添加如下参数
+rpc_backend = rabbit
+auth_strategy = keystone
+my_ip = MANAGEMENT_INTERFACE_IP_ADDRESS		#替换MANAGEMENT_INTERFACE_IP_ADDRESS为compute node的管理网络接口的IP地址，如本示例中为10.0.0.31
+
+#在[DEFAULT]中添加可以支持的网络服务
+network_api_class = nova.network.neutronv2.api.API
+security_group_api = neutron
+linuxnet_interface_driver = nova.network.linux_net.NeutronLinuxBridgeInterfaceDriver
+firewall_driver = nova.virt.firewall.NoopFirewallDriver
+##注意 ： 默认情况下，操作系统会使用自己的防火墙服务，但是我们需要停止掉操作系统的防火墙服务，使用 nova.virt.firewall.NoopFirewallDriver 的防火墙驱动服务
+
+#在[default]中添加用于输出详细日志信息的参数
+verbose = True
+
+
+#在[oslo_messaging_rabbit] 中添加如下参数
+rabbit_host = controller
+rabbit_userid = openstack
+rabbit_password = RABBIT_PASS
+#RABBIT_PASS替换为自己的密码
+
+#在[keystone_authtoken]中添加如下参数
+
+auth_uri = http://controller:5000
+auth_url = http://controller:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = nova
+password = NOVA_PASS
+
+#NOVA_PASS替换为自己的密码
+
+#在[vnc]中配置如下参数
+#注：服务组件监听所有的IP地址，而代理组件仅监听compute node的管理接口IP地址，可以通过网络浏览器基于URL的方式通过远程访问控制台管理这台compute node。
+#注：如果通过在浏览器中输入主机名称的方式不能访问被管理的主机，可以替换controllerewingcontroller node 的管理接口IP地址。
+
+enabled = True
+vncserver_listen = 0.0.0.0
+vncserver_proxyclient_address = $my_ip
+novncproxy_base_url = http://controller:6080/vnc_auto.html
+
+#在[glance]中添加如下参数
+host = controller
+
+#在[oslo_concurrency]中添加如下参数
+lock_path = /var/lib/nova/tmp
+
+#判断宿主机（compute、controller node）是否支持KVM，如果支持，输出的值大于0（一般为4）；如果不支持，输出值为0，这种情况只能使用QEMU，如果使用QEMU，需要做如下
+配置
+
+#编辑/etc/nova/nova-compute.conf文件中的[libvirt]参数，修改如下内容
+
+virt_type = qemu
+
+#重启compute service
+service nova-compute restart
+
+注释：
+
+一般来说，ubuntu系统会创建一个SQLite数据库，这会造成openstack访问异常，所以需要手动删除这个SQLite数据库，命令具体如下：
+rm -f /var/lib/glance/glance.sqlite
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

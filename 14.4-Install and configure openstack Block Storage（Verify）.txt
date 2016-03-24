@@ -1,0 +1,17 @@
+#参考http://docs.openstack.org/liberty/install-guide-ubuntu/cinder-verify.html
+
+#验证块存储服务
+
+#在controller node上执行如下命令
+
+#获取admin权限
+source admin-openrc.sh
+
+#列出服务组件，去验证每个进程是否成功运行
+cinder service-list
++------------------+------------+------+---------+-------+----------------------------+-----------------+
+|      Binary      |    Host    | Zone |  Status | State |         Updated_at         | Disabled Reason |
++------------------+------------+------+---------+-------+----------------------------+-----------------+
+| cinder-scheduler | controller | nova | enabled |   up  | 2014-10-18T01:30:54.000000 |       None      |
+| cinder-volume    | block1@lvm | nova | enabled |   up  | 2014-10-18T01:30:57.000000 |       None      |
++------------------+------------+------+---------+-------+----------------------------+-----------------+
