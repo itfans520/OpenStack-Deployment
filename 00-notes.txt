@@ -1,3 +1,5 @@
 overlay network（覆盖网）
 覆盖网是建立在现有网络基础之上独立的虚拟网；是面向应用层的，不考虑或者很少考虑网络层和物理层。
 参考：http://wenku.baidu.com/link?url=nuzs69i35CZUSj2l4sJi-n85_gmE9JLKnVHGdf9NuXay-ymZFCx23pGUGZ8RkgNCL-UgZq5rR5YG3878MDZWlpnyH3cjVgZEUNK7Vaa5fLy
+
+111
